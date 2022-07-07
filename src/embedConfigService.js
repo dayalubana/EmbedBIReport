@@ -14,14 +14,14 @@ const fetch = require('node-fetch');
  * Generate embed token and embed urls for reports
  * @return Details like Embed URL, Access token and Expiry
  */
-async function getEmbedInfo() {
-
+async function getEmbedInfo(data) {
+ 
     // Get the Report Embed details
     try {
 
-        // Get report details and embed token
-        console.log(config);
-        const embedParams = await getEmbedParamsForSingleReport(config.workspaceId, config.reportId);
+        // // Get report details and embed token
+        // console.log('reportsAndWorkspace',reportsAndWorkspace);
+        const embedParams = await getEmbedParamsForSingleReport(data.workspaceId, data.reportId);
 
         return {
             'accessToken': embedParams.embedToken.token,

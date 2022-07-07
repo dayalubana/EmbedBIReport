@@ -8,6 +8,7 @@ const cookieParser = require("cookie-parser");
 var jwt  = require('jsonwebtoken');
 const app = express();
 var db = require('../database/db');
+var response = require('../data/powerBI').module
 
 var user = require("./user")
 let config = require(__dirname + "/../config/config.js").module;
@@ -45,13 +46,85 @@ const authorization = (req, res, next) => {
     }
   };
 
+  const validate = (req, res, next) => {
+    const rid = req.query.reportid;
+    const wid = req.query.workspaceid;
+    const data = filterBasedOnUser(req.cookies.user,req.cookies.role);
+    let rf = false, wf = false;
+    data.workspaces.forEach((w)=>{
+        if(w.id==wid){
+            wf=true;
+        }
+    });
+    data.reports.forEach((r)=>{
+        if(r.id==rid){
+            rf=true;
+        }
+    });
+    if(rf&&wf){
+        console.log('first');
+        next();
+    } else{
+        console.log('second');
+        res.redirect('/');
+    }
+  };
+
 app.get('/', authorization, function (req, res) {
     // res.sendFile(path.join(__dirname + '/../views/index.html'));
-    res.render("index")
+    const data = filterBasedOnUser(req.cookies.user,req.cookies.role);
+
+    res.render("index", {reports: data.reports});
 });
 
-app.get('/getEmbedToken', async function (req, res) {
+app.get('/getreport', authorization, validate, function (req, res) {
+    res.render("report", {reportId: req.query.reportid, workspaceId: req.query.workspaceid});
+});
 
+function filterBasedOnUser(user,role){
+    console.log(user,role);
+    const data = {
+        workspaces: [],
+        reports: []
+    }
+    // console.log(response);
+    var roles = [];
+    if(role=='admin'){
+        roles = ['staff','partner','patient'];
+    } else{
+        roles = [role];
+    }
+    console.log(roles);
+    roles.forEach((r)=>{
+        response[r]?.forEach(res=>{
+            if(res.access.user.includes(user) || role=='admin'){
+    
+                data.workspaces.push(
+                    {
+                        id: res.workspaceid,
+                        name: res.workspace_name
+                    }
+                );
+                res.reports.forEach((report)=>{
+                    if(report.access.user.includes(user) || role=='admin'){
+                        data.reports.push(
+                            {
+                                id: report.reportId,
+                                name: report.report_name,
+                                workspace: res.workspaceid
+                            }
+                        );
+                    }
+                })
+            }
+        })
+    })
+    
+    return data;
+}
+
+app.get('/getEmbedToken', async function (req, res) {
+    console.log(req.query.reportid);
     // Validate whether all the required configurations are provided in config.json
     configCheckResult = utils.validateConfig();
     if (configCheckResult) {
@@ -59,8 +132,10 @@ app.get('/getEmbedToken', async function (req, res) {
             "error": configCheckResult
         });
     }
+    // console.log('embedkeander',filterBasedOnUser());
+    // const reportsAndWorkspace = filterBasedOnUser();
     // Get the details like Embed URL, Access token and Expiry
-    let result = await embedToken.getEmbedInfo();
+    let result = await embedToken.getEmbedInfo({reportId:req.query.reportid,workspaceId:req.query.workspaceid});
 
     // result.status specified the statusCode that will be sent along with the result object
     res.status(result.status).send(result);

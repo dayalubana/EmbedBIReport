@@ -26,7 +26,11 @@ app.get('/login', function (req, res) {
 app.get('/logout', function (req, res) {
   res
   .clearCookie("access_token")
-  .redirect("/login");
+  res
+  .clearCookie("user")
+  res
+  .clearCookie("role")
+  res.redirect("/login");
 });
 
 app.post('/register',async (req,res)=>{
@@ -96,7 +100,15 @@ app.post('/login',async (req,res)=>{
             httpOnly: true,
             secure: false,
           })
-          .redirect('/');
+          res.cookie("user", user.name, {
+            httpOnly: true,
+            secure: false,
+          })
+          res.cookie("role", user.role, {
+            httpOnly: true,
+            secure: false,
+          })
+          res.redirect('/');
         } else{
             // console.log('333333333');
             req.session.error = "Invalid Credentials"
