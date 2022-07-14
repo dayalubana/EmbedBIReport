@@ -1,35 +1,191 @@
+"use strict";
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
+Object.defineProperty(exports, "__esModule", { value: true });
+const express = require("express");
 var env = require('dotenv').config();
-let path = require('path');
 let embedToken = require(__dirname + '/embedConfigService.js');
 const utils = require(__dirname + "/utils.js");
-const express = require("express");
-const bodyParser = require("body-parser");
+const passport_azure_ad_1 = __importDefault(require("passport-azure-ad"));
+const passport_1 = __importDefault(require("passport"));
+const body_parser_1 = __importDefault(require("body-parser"));
+const express_validator_1 = __importDefault(require("express-validator"));
+const express_session_1 = __importDefault(require("express-session"));
+const cookie_parser_1 = __importDefault(require("cookie-parser"));
+const path_1 = __importDefault(require("path"));
+const secrets_1 = require("./secret");
+const passport_2 = __importDefault(require("./passport"));
+const OIDCStrategy = passport_azure_ad_1.default.OIDCStrategy;
 const cookieParser = require("cookie-parser");
 var jwt  = require('jsonwebtoken');
-const app = express();
 var db = require('../database/db');
 var response = require('../data/powerBI').module
+var usersData = require('../data/user').module
 
-var user = require("./user")
-let config = require(__dirname + "/../config/config.js").module;
-var session = require('express-session')
-app.set('trust proxy', 1) // trust first proxy
-app.use(session({secret: 'mySecret', resave: false, saveUninitialized: false}));
-app.use(bodyParser.json());
-
-app.use(bodyParser.urlencoded({
-    extended: true
+passport_1.default.serializeUser(function (user, done) {
+    done(null, user.oid);
+});
+passport_1.default.deserializeUser(function (oid, done) {
+    findByOid(oid, function (err, user) {
+        done(err, user);
+    });
+});
+var users = [];
+var findByOid = function (oid, fn) {
+    for (var i = 0, len = users.length; i < len; i++) {
+        var user = users[i];
+        if (user.oid === oid) {
+            return fn(null, user);
+        }
+    }
+    return fn(null, null);
+};
+passport_1.default.use(new OIDCStrategy({
+    identityMetadata: passport_2.default.creds.identityMetadata,
+    clientID: passport_2.default.creds.clientID,
+    responseType: 'code id_token',
+    responseMode: 'form_post',
+    redirectUrl: passport_2.default.creds.redirectUrl,
+    allowHttpForRedirectUrl: true,
+    clientSecret: passport_2.default.creds.clientSecret,
+    validateIssuer: true,
+    isB2C: false,
+    issuer: '',
+    passReqToCallback: false,
+    scope: '',
+    loggingLevel: 'error',
+    nonceLifetime: 0,
+    nonceMaxAmount: 5,
+    useCookieInsteadOfSession: true,
+    cookieEncryptionKeys: [
+        { 'key': '12345678901234567890123456789012', 'iv': '123456789012' },
+        { 'key': 'abcdefghijklmnopqrstuvwxyzabcdef', 'iv': 'abcdefghijkl' }
+    ],
+}, function (iss, sub, profile, accessToken, refreshToken, done) {
+    if (!profile.oid) {
+        return done(new Error('No oid found'), null);
+    }
+    // asynchronous verification, for effect...
+    process.nextTick(function () {
+        findByOid(profile.oid, function (err, user) {
+            if (err) {
+                return done(err);
+            }
+            if (!user) {
+                // "Auto-registration"
+                users.push(profile);
+                return done(null, profile);
+            }
+            return done(null, user);
+        });
+    });
 }));
+// Create a new express application instance
+const app = express();
 app.use(cookieParser());
 app.set('view engine', 'ejs');
-// Prepare server for Bootstrap, jQuery and PowerBI files
+app.use(body_parser_1.default.json());
+app.use(body_parser_1.default.urlencoded({ extended: true }));
+app.use(express_validator_1.default());
+app.use(cookie_parser_1.default());
+app.use(express_session_1.default({
+    resave: true,
+    saveUninitialized: true,
+    secret: secrets_1.SESSION_SECRET
+}));
+app.use(passport_1.default.initialize());
+app.use(passport_1.default.session());
+app.use((req, res, next) => {
+    res.locals.user = req.user;
+    next();
+});
+// CORS  
+app.use(function (req, res, next) {
+    res.header('Access-Control-Allow-Origin', secrets_1.URL_FRONTEND);
+    res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept');
+    res.header('Access-Control-Allow-Methods', 'GET, PUT, POST, DELETE, OPTIONS');
+    res.header('Access-Control-Allow-Credentials', 'true');
+    next();
+});
 app.use('/js', express.static('./node_modules/bootstrap/dist/js/')); // Redirect bootstrap JS
 app.use('/js', express.static('./node_modules/jquery/dist/')); // Redirect JS jQuery
 app.use('/js', express.static('./node_modules/powerbi-client/dist/')) // Redirect JS PowerBI
 app.use('/css', express.static('./node_modules/bootstrap/dist/css/')); // Redirect CSS bootstrap
 app.use('/public', express.static('./public/')); // Use custom JS and CSS files
-app.use("/",user);
-const port = process.env.PORT || 5300;
+
+function ensureAuthenticated(req, res, next) {
+    if (req.isAuthenticated()) {
+        return next();
+    }
+    res.redirect('/login');
+}
+;
+app.get('/islogin', function (req, res, next) {
+    res.send(req.isAuthenticated());
+    next();
+});
+app.get('/login', function (req, res, next) {
+    passport_1.default.authenticate('azuread-openidconnect', {
+        failureRedirect: '/fail',
+    })(req, res, next);
+}, function (req, res) {
+    res.redirect('/');
+});
+app.post('/callback', function (req, res, next) {
+    passport_1.default.authenticate('azuread-openidconnect', {
+        failureRedirect: '/callbackfail',
+    })(req, res, next);
+}, function (req, res) {
+    // req.user._json.name = 'Swatantra Parmar';
+    let filteredUser = usersData.filter((user)=>{
+        if(user.name==req.user._json.name.split(' ').join('_')){
+            return user;
+        }
+    })
+    if(filteredUser.length>0){
+        res
+        .cookie("user", filteredUser[0].name, {
+        httpOnly: true,
+        secure: false,
+        })
+        res
+        .cookie("role", filteredUser[0].role, {
+        httpOnly: true,
+        secure: false,
+        })
+    }
+    const token = jwt.sign(
+        { oid: req.user.oid },
+        process.env.TOKEN_KEY,
+        {
+            expiresIn: "2h",
+        }
+    );
+    res
+    .cookie("access_token", token, {
+    httpOnly: true,
+    secure: false,
+    })
+    res.redirect('/');
+});
+app.get('/account', ensureAuthenticated, function (req, res) {
+    res.send(req.user);
+});
+app.get('/logout', function (req, res) {
+    req.session.destroy(function (err) {
+        req.logOut();
+        res.redirect(passport_2.default.destroySessionUrl);
+    });
+});
+app.use(express.static(path_1.default.join(__dirname, './../public'), {
+    setHeaders(res) {
+        res.setHeader('Cache-Control', 'public,no-cache');
+    }
+}));
+app.get('/api', function (req, res) {
+    res.send('Server is started!');
+});
 
 const authorization = (req, res, next) => {
     const token = req.cookies.access_token;
@@ -37,10 +193,12 @@ const authorization = (req, res, next) => {
         return res.redirect("/login");
     }
     try {
-      const data = jwt.verify(token, process.env.TOKEN_KEY);
-    //   req.userId = data.id;
-    //   req.userRole = data.role;
-      return next();
+      const decoded = jwt.verify(token, process.env.TOKEN_KEY);
+        if(decoded&&decoded.oid==req.user.oid){
+            return next();
+        } else{
+            return res.redirect('/login')
+        }
     } catch {
         return res.redirect("/login");
     }
@@ -62,19 +220,18 @@ const authorization = (req, res, next) => {
         }
     });
     if(rf&&wf){
-        console.log('first');
         next();
     } else{
-        console.log('second');
         res.redirect('/');
     }
   };
 
-app.get('/', authorization, function (req, res) {
+app.get('/',
+authorization,
+ function (req, res) {
     // res.sendFile(path.join(__dirname + '/../views/index.html'));
     const data = filterBasedOnUser(req.cookies.user,req.cookies.role);
-
-    res.render("index", {reports: data.reports});
+    res.render("index",{reports:data.reports});
 });
 
 app.get('/getreport', authorization, validate, function (req, res) {
@@ -82,19 +239,22 @@ app.get('/getreport', authorization, validate, function (req, res) {
 });
 
 function filterBasedOnUser(user,role){
-    console.log(user,role);
+    if(!user || !role){
+        return {
+            workspaces: [],
+            reports: []
+        };
+    }
     const data = {
         workspaces: [],
         reports: []
     }
-    // console.log(response);
     var roles = [];
     if(role=='admin'){
         roles = ['staff','partner','patient'];
     } else{
         roles = [role];
     }
-    console.log(roles);
     roles.forEach((r)=>{
         response[r]?.forEach(res=>{
             if(res.access.user.includes(user) || role=='admin'){
@@ -124,21 +284,17 @@ function filterBasedOnUser(user,role){
 }
 
 app.get('/getEmbedToken', async function (req, res) {
-    console.log(req.query.reportid);
     // Validate whether all the required configurations are provided in config.json
-    configCheckResult = utils.validateConfig();
+    var configCheckResult = utils.validateConfig();
     if (configCheckResult) {
         return res.status(400).send({
             "error": configCheckResult
         });
     }
-    // console.log('embedkeander',filterBasedOnUser());
-    // const reportsAndWorkspace = filterBasedOnUser();
-    // Get the details like Embed URL, Access token and Expiry
     let result = await embedToken.getEmbedInfo({reportId:req.query.reportid,workspaceId:req.query.workspaceid});
-
-    // result.status specified the statusCode that will be sent along with the result object
     res.status(result.status).send(result);
 });
 
-app.listen(port, () => console.log(`Listening on port ${port}`));
+app.listen(secrets_1.PORT, function () {
+    console.log('http://localhost:' + secrets_1.PORT);
+});

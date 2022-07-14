@@ -5,7 +5,7 @@ exports.module = {
 		    workspace_name: 'partner workspace',
             access:
                 {
-                    user: ['daya','swat'],
+                    user: ['Daya_Singh','Swatantra_Parmar'],
                 }
             ,
             reports: [
@@ -14,7 +14,7 @@ exports.module = {
 			        report_name: 'Partner Report',
                     access:
                         {
-                            user: ['daya','swat'],
+                            user: ['Daya_Singh','Swatantra_Parmar'],
                             name: 'abc',
                         }
                 },
@@ -28,7 +28,7 @@ exports.module = {
 		    workspace_name: 'Patient Workspace',
             access:
                 {
-                    user: ['daya','swat'],
+                    user: ['Daya_Singh','Swatantra_Parmar'],
                 }
             ,
             reports: [
@@ -37,7 +37,7 @@ exports.module = {
 			        report_name: 'Patient Report',
                     access:
                         {
-                            user: ['daya'],
+                            user: ['Daya_Singh'],
                             name: 'abc',
                         }
                 },
@@ -53,7 +53,7 @@ exports.module = {
                 workspace_name: 'Staff Workspace',
                 access:
                     {
-                        user: ['daya','ankit'],
+                        user: ['Daya_Singh','ankit'],
                     }
                 ,
                 reports: [

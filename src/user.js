@@ -4,6 +4,7 @@ var app = express();
 var UserModel = require('../database/modals/user');
 var bcrypt  = require('bcryptjs')
 var jwt  = require('jsonwebtoken');
+const { Duplex } = require("stream");
 
 app.get('/register', function (req, res) {
     const error = req.session?.error;
@@ -40,10 +41,9 @@ app.post('/register',async (req,res)=>{
             req.session.error = "All inputs are required"
             res.redirect('/register');
         }
-    
+        var data = [10,2,3,4,5,8]
         const oldUser = await UserModel.findOne({ name });
         const oldUser1 = await UserModel.findOne({ email });
-    
         if (oldUser) {
             req.session.error = "User Name Already Exist"
             res.redirect('/register');

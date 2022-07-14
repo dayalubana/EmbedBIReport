@@ -4,7 +4,6 @@
 // ----------------------------------------------------------------------------
 
 let config = require(__dirname + "/../config/config.js").module;
-
 function getAuthHeader(accessToken) {
 
     // Function to append Bearer against the Access Token
