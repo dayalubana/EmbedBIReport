@@ -81,7 +81,7 @@ const options = {
     ],
 }
 passport_1.default.use(new OIDCStrategy(options, function (iss, sub, profile, accessToken, refreshToken, done) {
-    console.log(profile);
+    // console.log(profile);
     if (!profile.oid) {
         return done(new Error('No oid found'), null);
     }
@@ -154,7 +154,10 @@ app.post('/login',async (req,res)=>{
     if(tenant=='veersalabs.com' || tenant=='veersatech.com'){
         res.redirect('/b2b-login');
     } else{
-        res.redirect('https://vytal1.b2clogin.com/vytal1.onmicrosoft.com/oauth2/v2.0/authorize?p=B2C_1_vytal_b2c&client_id=ffcc2a75-7d3e-4065-aab4-4f7f2d9abb63&nonce=defaultNonce&redirect_uri=http%3A%2F%2Flocalhost%3A4000%2Fcallback&scope=openid&response_type=code&prompt=login');
+        // B2C_TENANT="vytal1"
+        // B2C_POLICY="B2C_1_vytal_b2c"
+        var url = `https://${process.env.B2C_TENANT}.b2clogin.com/${process.env.B2C_TENANT}.onmicrosoft.com/oauth2/v2.0/authorize?p=${process.env.B2C_POLICY}&client_id=${process.env.B2C_CLIENTID}&nonce=defaultNonce&redirect_uri=http%3A%2F%2Flocalhost%3A4000%2Fcallback&scope=openid&response_type=code&prompt=login`
+        res.redirect(url);
     }
 })
 
