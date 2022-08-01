@@ -41,7 +41,24 @@ var findByOid = function (oid, fn) {
     }
     return fn(null, null);
 };
-passport_1.default.use(new OIDCStrategy({
+
+// const options = {
+//     identityMetadata: passport_2.default.creds.identityMetadata,
+//     clientID: config.credentials.clientID,
+//     audience: config.credentials.clientID,
+//     // policyName: config.policies.policyName,
+//     isB2C: config.settings.isB2C,
+//     clientSecret: passport_2.default.creds.clientSecret,
+//     redirectUrl: passport_2.default.creds.redirectUrl,
+//     responseType: 'code id_token',
+//     responseMode: 'form_post',
+//     validateIssuer: config.settings.validateIssuer,
+//     loggingLevel: config.settings.loggingLevel,
+//     passReqToCallback: config.settings.passReqToCallback,
+//     allowHttpForRedirectUrl: true
+// }
+
+const options = {
     identityMetadata: passport_2.default.creds.identityMetadata,
     clientID: passport_2.default.creds.clientID,
     responseType: 'code id_token',
@@ -62,7 +79,9 @@ passport_1.default.use(new OIDCStrategy({
         { 'key': '12345678901234567890123456789012', 'iv': '123456789012' },
         { 'key': 'abcdefghijklmnopqrstuvwxyzabcdef', 'iv': 'abcdefghijkl' }
     ],
-}, function (iss, sub, profile, accessToken, refreshToken, done) {
+}
+passport_1.default.use(new OIDCStrategy(options, function (iss, sub, profile, accessToken, refreshToken, done) {
+    console.log(profile);
     if (!profile.oid) {
         return done(new Error('No oid found'), null);
     }
@@ -125,50 +144,27 @@ app.get('/islogin', function (req, res, next) {
     res.send(req.isAuthenticated());
     next();
 });
-app.get('/login', function (req, res, next) {
-    passport_1.default.authenticate('azuread-openidconnect', {
-        failureRedirect: '/fail',
-    })(req, res, next);
-}, function (req, res) {
-    res.redirect('/');
+app.get('/login', (req, res)=> {
+    res.render('login',{error: ''});
 });
-app.post('/callback', function (req, res, next) {
-    passport_1.default.authenticate('azuread-openidconnect', {
-        failureRedirect: '/callbackfail',
-    })(req, res, next);
-}, function (req, res) {
-    // req.user._json.name = 'Swatantra Parmar';
-    let filteredUser = usersData.filter((user)=>{
-        if(user.name==req.user._json.name.split(' ').join('_')){
-            return user;
-        }
-    })
-    if(filteredUser.length>0){
-        res
-        .cookie("user", filteredUser[0].name, {
-        httpOnly: true,
-        secure: false,
-        })
-        res
-        .cookie("role", filteredUser[0].role, {
-        httpOnly: true,
-        secure: false,
-        })
+
+app.post('/login',async (req,res)=>{
+    const { email } = req.body;
+    var tenant = email.split('@')[1];
+    if(tenant=='veersalabs.com' || tenant=='veersatech.com'){
+        res.redirect('/b2b-login');
+    } else{
+        res.redirect('https://vytal1.b2clogin.com/vytal1.onmicrosoft.com/oauth2/v2.0/authorize?p=B2C_1_vytal_b2c&client_id=ffcc2a75-7d3e-4065-aab4-4f7f2d9abb63&nonce=defaultNonce&redirect_uri=http%3A%2F%2Flocalhost%3A4000%2Fcallback&scope=openid&response_type=code&prompt=login');
     }
-    const token = jwt.sign(
-        { oid: req.user.oid },
-        process.env.TOKEN_KEY,
-        {
-            expiresIn: "2h",
-        }
-    );
-    res
-    .cookie("access_token", token, {
-    httpOnly: true,
-    secure: false,
-    })
-    res.redirect('/');
-});
+})
+
+app.get('/b2b-login',
+passport_1.default.authenticate('azuread-openidconnect', { failureRedirect: '/fail' }),
+(req,res)=>{
+    // console.log('PPPPPPPPPPPPPP');
+res.redirect('/')
+})
+
 app.get('/account', ensureAuthenticated, function (req, res) {
     res.send(req.user);
 });
@@ -194,7 +190,7 @@ const authorization = (req, res, next) => {
     }
     try {
       const decoded = jwt.verify(token, process.env.TOKEN_KEY);
-        if(decoded&&decoded.oid==req.user.oid){
+        if(decoded){
             return next();
         } else{
             return res.redirect('/login')
@@ -230,11 +226,12 @@ app.get('/',
 authorization,
  function (req, res) {
     // res.sendFile(path.join(__dirname + '/../views/index.html'));
-    const data = filterBasedOnUser(req.cookies.user,req.cookies.role);
+    const data = filterBasedOnUser('Daya_Singh','admin');
     res.render("index",{reports:data.reports});
 });
 
-app.get('/getreport', authorization, validate, function (req, res) {
+app.get('/getreport', function (req, res) {
+    // console.log('anderrrrrrrrrr');
     res.render("report", {reportId: req.query.reportid, workspaceId: req.query.workspaceid});
 });
 
@@ -282,6 +279,64 @@ function filterBasedOnUser(user,role){
     
     return data;
 }
+app.get('/callback',(req,res)=>{
+    if(req.query.code){
+        const token = jwt.sign(
+            { code: req.query.code },
+            process.env.TOKEN_KEY,
+            {
+                expiresIn: "2h",
+            }
+        );
+        res
+        .cookie("access_token", token, {
+        httpOnly: true,
+        secure: false,
+        })
+        res.redirect('/');
+    }
+})
+app.post('/callback', 
+function (req, res, next) {
+    passport_1.default.authenticate('azuread-openidconnect', {
+        failureRedirect: '/callbackfail',
+    })(req, res, next);
+},
+function (req, res) {
+    // console.log('QQQQQQQ',req.body,req.user);
+    // console.log('callback url',req.body);
+    // req.user._json.name = 'Swatantra Parmar';
+    // let filteredUser = usersData.filter((user)=>{
+    //     if(user.name==req.user._json.name.split(' ').join('_')){
+    //         return user;
+    //     }
+    // })
+    // if(filteredUser.length>0){
+    //     res
+    //     .cookie("user", filteredUser[0].name, {
+    //     httpOnly: true,
+    //     secure: false,
+    //     })
+    //     res
+    //     .cookie("role", filteredUser[0].role, {
+    //     httpOnly: true,
+    //     secure: false,
+    //     })
+    // }
+    const token = jwt.sign(
+        { code: req.body.code },
+        process.env.TOKEN_KEY,
+        {
+            expiresIn: "2h",
+        }
+    );
+    res
+    .cookie("access_token", token, {
+    httpOnly: true,
+    secure: false,
+    })
+    res.redirect('/');
+});
 
 app.get('/getEmbedToken', async function (req, res) {
     // Validate whether all the required configurations are provided in config.json
